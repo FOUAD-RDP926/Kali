@@ -1,0 +1,20 @@
+name: Kali Linux Session
+
+on:
+  workflow_dispatch:
+
+jobs:
+  kali:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Pull Kali Linux
+        run: |
+          docker pull kalilinux/kali-rolling
+
+      - name: Start Kali + tmate
+        run: |
+          docker run -dit --name kali kalilinux/kali-rolling bash
+          docker exec kali apt update
+          docker exec kali apt install -y tmate sudo
+          docker exec kali tmate -F
