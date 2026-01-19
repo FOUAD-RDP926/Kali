@@ -1,53 +1,74 @@
-name: Kali Linux Web VNC
+name: Kali Linux Full GUI & Tools
 on: 
   workflow_dispatch:
 
 jobs:
-  build:
+  kali-vnc:
     runs-on: ubuntu-latest
     steps:
-      - name: Update and Install Kali Linux Environment
+      - name: Update and Install Kali Repositories
         run: |
           sudo apt-get update
-          # تثبيت الواجهة الرسومية وخادم VNC (إصدار خفيف لسرعة التشغيل)
-          sudo apt-get install -y xfce4 xfce4-goodies tightvncserver dbus-x11
-          
-      - name: Setup VNC Server
+          # تثبيت المفاتيح والمستودعات الخاصة بكالي إذا لزم الأمر
+          sudo apt-get install -y gnupg wget
+          wget -q -O - https://archive.kali.org/archive-key.asc | sudo apt-key add -
+          echo "deb http://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware" | sudo调整 tee /etc/apt/sources.list
+          sudo apt-get update
+
+      - name: Install Kali Desktop & Requested Tools
         run: |
-          # إنشاء كلمة مرور لـ VNC (كلمة المرور: kali123)
+          # منع ظهور نوافذ تفاعلية أثناء التثبيت
+          export DEBIAN_FRONTEND=noninteractive
+          # تثبيت الواجهة الرسومية الكاملة والأدوات المطلوبة
+          sudo apt-get install -y kali-desktop-xfce xfce4 xfce4-goodies \
+          tightvncserver novnc python3-websockify \
+          kali-linux-default impacket-scripts burpsuite binwalk
+
+      - name: Setup VNC Password
+        run: |
           mkdir -p ~/.vnc
+          # كلمة المرور للدخول: kali123
           echo "kali123" | vncpasswd -f > ~/.vnc/passwd
           chmod 600 ~/.vnc/passwd
-          
-          # بدء تشغيل السيرفر
+
+      - name: Configure VNC for Kali Desktop
+        run: |
+          # إعداد ملف التشغيل لضمان ظهور واجهة كالي الرسمية
+          cat <<EOF > ~/.vnc/xstartup
+          #!/bin/sh
+          unset SESSION_MANAGER
+          unset DBUS_SESSION_BUS_ADDRESS
+          startxfce4 &
+          EOF
+          chmod +x ~/.vnc/xstartup
+
+      - name: Start Services (VNC, NoVNC, Cloudflare)
+        run: |
+          # تشغيل سيرفر VNC
           vncserver :1 -geometry 1280x720 -depth 24
           
-      - name: Install and Start NoVNC (Web Interface)
-        run: |
-          sudo apt-get install -y novnc python3-websockify
-          # تشغيل websockify لتحويل VNC إلى Web Port 6080
+          # تشغيل Web Interface (NoVNC)
           nohup websockify --web /usr/share/novnc/ 6080 localhost:5901 &
           
-      - name: Install Cloudflared (Tunnel)
-        run: |
+          # تحميل وتشغيل Cloudflare Tunnel
           curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
           sudo dpkg -i cloudflared.deb
           
-      - name: Start Cloudflare Tunnel
-        run: |
           echo "---------------------------------------------------"
-          echo "جاري تشغيل الرابط... انتظر ظهور رابط trycloudflare.com"
-          echo "---------------------------------------------------"
-          # تشغيل التانل وربطه بـ نو في إن سي
+          echo "جاري إنشاء رابط الدخول..."
           nohup cloudflared tunnel --url http://localhost:6080 > tunnel.log 2>&1 &
-          sleep 10
+          sleep 15
+          
+          echo "---------------------------------------------------"
+          echo "رابط الدخول الخاص بك (Web VNC):"
           grep -o 'https://[-a-z0-9.]*trycloudflare.com' tunnel.log | head -n 1
           echo "---------------------------------------------------"
-          echo "كلمة السر هي: kali123"
+          echo "كلمة السر: kali123"
           echo "---------------------------------------------------"
 
-      - name: Keep Alive
+      - name: Keep Runner Active
         run: |
-          # الحفاظ على تشغيل السيرفر لمدة 6 ساعات
+          # يبقي السيرفر يعمل لمدة 6 ساعات
           sleep 21600
+          
           
