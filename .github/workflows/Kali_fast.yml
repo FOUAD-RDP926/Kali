@@ -1,4 +1,4 @@
-name: Kali Linux Mobile Pro
+name: Kali Linux Mobile Fix
 on: 
   workflow_dispatch:
 
@@ -6,44 +6,47 @@ jobs:
   kali-vnc:
     runs-on: ubuntu-latest
     steps:
-      - name: Maximize Disk Space
+      - name: Maximize Space
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
           sudo apt-get clean
 
       - name: Start Kali Kasm Desktop
         run: |
-          # تشغيل النسخة الاحترافية (Password: password)
-          # سحب الصورة قد يأخذ دقيقة، لا تقلق
+          # تشغيل الحاوية مع فتح المنافذ بشكل صريح
           docker run -d --name kali-mobile --privileged -p 6080:6901 -e VNC_PW=password kasmweb/kali-rolling-desktop:1.14.0
           
-      - name: Background Tools Install
+      - name: Wait for Service & Setup Tunnel
         run: |
-          # تثبيت الأدوات في الخلفية (مش هيعطلك عن الدخول)
-          docker exec -u 0 -d kali-mobile bash -c "apt-get update && apt-get install -y impacket-scripts burpsuite binwalk"
-
-      - name: Setup Cloudflare Tunnel
-        run: |
+          # تثبيت Cloudflare
           curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
           sudo dpkg -i cloudflared.deb
           
+          # الحصول على IP الحاوية الداخلي لضمان الربط
+          KALI_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' kali-mobile)
+          echo "Internal IP: $KALI_IP"
+
           echo "---------------------------------------------------"
-          echo "جاري إنشاء رابط التوصيل... انتظر قليلاً"
-          # تشغيل التانل
-          nohup cloudflared tunnel --url http://localhost:6080 > tunnel.log 2>&1 &
+          echo "جاري تشغيل الرابط... انتظر 40 ثانية لإقلاع النظام بالداخل"
           
-          # انتظار 30 ثانية لضمان استقرار cloudflare
-          sleep 30
+          # ربط التانل بـ IP الحاوية مباشرة على بورت 6901 (البورت الأصلي لـ Kasm)
+          nohup cloudflared tunnel --url https://$KALI_IP:6901 --no-tls-verify > tunnel.log 2>&1 &
+          
+          # انتظار كافٍ لإتمام الإقلاع
+          sleep 45
           
           TUNNEL_URL=$(grep -o 'https://[-a-z0-9.]*trycloudflare.com' tunnel.log | head -n 1)
-          echo "✅ النظام جاهز الآن!"
+          echo "✅ الرابط جاهز الآن!"
           echo "رابط الدخول المباشر:"
           echo "$TUNNEL_URL"
           echo "---------------------------------------------------"
-          echo "Username: kasm_user"
-          echo "Password: password"
+          echo "User: kasm_user | Pass: password"
           echo "---------------------------------------------------"
-          echo "⚠️ ملاحظة: لو فتحت الرابط ولقيته بيحمل، انتظر دقيقة لأن النظام بيقوم بالداخل"
 
-      - name: Maintain Session
+      - name: Install Tools in Background
+        run: |
+          docker exec -u 0 -d kali-mobile bash -c "apt-get update && apt-get install -y impacket-scripts burpsuite binwalk"
+
+      - name: Keep Alive
         run: sleep 21600
+        
