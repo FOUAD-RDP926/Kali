@@ -1,4 +1,4 @@
-name: Kali Linux Fullscreen Mobile
+name: Kali Linux Fixed Connection
 on: 
   workflow_dispatch:
 
@@ -6,50 +6,64 @@ jobs:
   kali-vnc:
     runs-on: ubuntu-latest
     steps:
-      - name: Maximize Disk Space
+      - name: Maximize Space
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
           sudo apt-get clean
 
       - name: Setup Kali Container
         run: |
-          # تشغيل الحاوية مع فتح بورتات الشبكة بالكامل
-          docker run -d --name kali-desktop --network host kalilinux/kali-rolling tail -f /dev/null
+          # تشغيل الحاوية مع صلاحيات كاملة والوصول للشبكة
+          docker run -d --name kali-desktop --privileged --network host kalilinux/kali-rolling tail -f /dev/null
 
-      - name: Install Tools & GUI
+      - name: Install Full Desktop & Web VNC
         run: |
           docker exec -u 0 -e DEBIAN_FRONTEND=noninteractive kali-desktop apt-get update
           docker exec -u 0 -e DEBIAN_FRONTEND=noninteractive kali-desktop apt-get install -y \
             kali-desktop-xfce xfce4-goodies tightvncserver novnc python3-websockify \
             kali-linux-default impacket-scripts burpsuite binwalk dbus-x11
 
-      - name: Configure Desktop & VNC
+      - name: Start VNC Server Safely
         run: |
-          # إعداد الباسورد الافتراضي kali123
-          docker exec -u 0 kali-desktop bash -c 'mkdir -p ~/.vnc && echo "kali123" | vncpasswd -f > ~/.vnc/passwd && chmod 600 ~/.vnc/passwd'
+          # تنظيف أي ملفات قديمة للـ VNC وإعداد الباسورد
+          docker exec -u 0 kali-desktop bash -c "rm -rf /tmp/.X11-unix /tmp/.X*-lock && mkdir -p ~/.vnc && echo 'kali123' | vncpasswd -f > ~/.vnc/passwd && chmod 600 ~/.vnc/passwd"
           
-          # ضبط تشغيل الواجهة الرسومية الرسمية لكالي
-          docker exec -u 0 kali-desktop bash -c 'echo "#!/bin/sh" > ~/.vnc/xstartup && echo "startxfce4 &" >> ~/.vnc/xstartup && chmod +x ~/.vnc/xstartup'
-
-      - name: Start Services & Cloudflare
-        run: |
-          # تشغيل VNC Server (بورت 5901)
+          # إنشاء ملف التشغيل
+          docker exec -u 0 kali-desktop bash -c "echo '#!/bin/sh' > ~/.vnc/xstartup && echo 'startxfce4 &' >> ~/.vnc/xstartup && chmod +x ~/.vnc/xstartup"
+          
+          # تشغيل VNC بورت 5901
           docker exec -d kali-desktop vncserver :1 -geometry 1280x720 -depth 24
           
-          # تشغيل NoVNC Bridge (بورت 6080) مع ربطه بجميع الواجهات
+          # الانتظار حتى يتأكد أن بورت 5901 مفتوح فعلياً
+          echo "Waiting for VNC Server to start..."
+          until docker exec kali-desktop netstat -tulpn | grep -q 5901; do sleep 2; done
+          echo "VNC Server is UP!"
+
+      - name: Start Web Bridge (NoVNC)
+        run: |
+          # تشغيل websockify للربط بين بورت 6080 و 5901
           docker exec -d kali-desktop websockify --web /usr/share/novnc/ 6080 127.0.0.1:5901
           
-          # تثبيت وتشغيل Cloudflared
+          # الانتظار حتى يتأكد أن بورت الويب 6080 مفتوح
+          echo "Waiting for NoVNC Bridge..."
+          until docker exec kali-desktop netstat -tulpn | grep -q 6080; do sleep 2; done
+          echo "Web Bridge is UP!"
+
+      - name: Start Cloudflare Tunnel
+        run: |
           curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
           sudo dpkg -i cloudflared.deb
           
           echo "---------------------------------------------------"
+          # تشغيل التانل
           nohup cloudflared tunnel --url http://127.0.0.1:6080 > tunnel.log 2>&1 &
-          sleep 30 # وقت إضافي لضمان استقرار الاتصال
           
+          # انتظار ظهور الرابط في السجلات
+          sleep 20
           TUNNEL_URL=$(grep -o 'https://[-a-z0-9.]*trycloudflare.com' tunnel.log | head -n 1)
-          echo "رابط الدخول المباشر للموبايل (Full Screen):"
-          echo "اضغط على الرابط التالي:"
+          
+          echo "✅ النظام جاهز الآن!"
+          echo "رابط الدخول المباشر (انسخه بالكامل):"
           echo "$TUNNEL_URL/vnc.html?autoconnect=true&resize=remote"
           echo "---------------------------------------------------"
           echo "الباسورد: kali123"
