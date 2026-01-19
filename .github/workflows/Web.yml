@@ -1,4 +1,4 @@
-name: Kali Linux Full GUI & Tools
+name: Kali Linux Fullscreen Mobile
 on: 
   workflow_dispatch:
 
@@ -9,17 +9,14 @@ jobs:
       - name: Update and Install Kali Repositories
         run: |
           sudo apt-get update
-          # تثبيت المفاتيح والمستودعات الخاصة بكالي إذا لزم الأمر
           sudo apt-get install -y gnupg wget
           wget -q -O - https://archive.kali.org/archive-key.asc | sudo apt-key add -
-          echo "deb http://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware" | sudo调整 tee /etc/apt/sources.list
+          echo "deb http://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware" | sudo tee /etc/apt/sources.list
           sudo apt-get update
 
       - name: Install Kali Desktop & Requested Tools
         run: |
-          # منع ظهور نوافذ تفاعلية أثناء التثبيت
           export DEBIAN_FRONTEND=noninteractive
-          # تثبيت الواجهة الرسومية الكاملة والأدوات المطلوبة
           sudo apt-get install -y kali-desktop-xfce xfce4 xfce4-goodies \
           tightvncserver novnc python3-websockify \
           kali-linux-default impacket-scripts burpsuite binwalk
@@ -27,13 +24,12 @@ jobs:
       - name: Setup VNC Password
         run: |
           mkdir -p ~/.vnc
-          # كلمة المرور للدخول: kali123
           echo "kali123" | vncpasswd -f > ~/.vnc/passwd
           chmod 600 ~/.vnc/passwd
 
-      - name: Configure VNC for Kali Desktop
+      - name: Configure VNC for Fullscreen Mobile
         run: |
-          # إعداد ملف التشغيل لضمان ظهور واجهة كالي الرسمية
+          # إعداد التشغيل التلقائي للواجهة
           cat <<EOF > ~/.vnc/xstartup
           #!/bin/sh
           unset SESSION_MANAGER
@@ -42,33 +38,35 @@ jobs:
           EOF
           chmod +x ~/.vnc/xstartup
 
+      - name: Optimize NoVNC for Fullscreen
+        run: |
+          # تعديل ملف HTML الخاص بـ NoVNC ليدعم ملء الشاشة على الموبايل
+          sed -i 's/<title>noVNC<\/title>/<title>Kali Linux<\/title><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">/' /usr/share/novnc/vnc.html
+
       - name: Start Services (VNC, NoVNC, Cloudflare)
         run: |
-          # تشغيل سيرفر VNC
+          # تشغيل VNC بدقة متغيرة لتناسب الموبايل
           vncserver :1 -geometry 1280x720 -depth 24
           
-          # تشغيل Web Interface (NoVNC)
+          # تشغيل NoVNC مع تفعيل خاصية الـ Autoconnect لسهولة الاستخدام
           nohup websockify --web /usr/share/novnc/ 6080 localhost:5901 &
           
-          # تحميل وتشغيل Cloudflare Tunnel
+          # تحميل وتشغيل Cloudflare
           curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
           sudo dpkg -i cloudflared.deb
           
           echo "---------------------------------------------------"
-          echo "جاري إنشاء رابط الدخول..."
           nohup cloudflared tunnel --url http://localhost:6080 > tunnel.log 2>&1 &
           sleep 15
           
-          echo "---------------------------------------------------"
-          echo "رابط الدخول الخاص بك (Web VNC):"
-          grep -o 'https://[-a-z0-9.]*trycloudflare.com' tunnel.log | head -n 1
+          echo "رابط الكالي الخاص بك:"
+          TUNNEL_URL=$(grep -o 'https://[-a-z0-9.]*trycloudflare.com' tunnel.log | head -n 1)
+          echo "$TUNNEL_URL/vnc.html?autoconnect=true"
           echo "---------------------------------------------------"
           echo "كلمة السر: kali123"
           echo "---------------------------------------------------"
 
       - name: Keep Runner Active
         run: |
-          # يبقي السيرفر يعمل لمدة 6 ساعات
           sleep 21600
-          
           
