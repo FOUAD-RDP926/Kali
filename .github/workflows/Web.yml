@@ -1,0 +1,53 @@
+name: Kali Linux Web VNC
+on: 
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update and Install Kali Linux Environment
+        run: |
+          sudo apt-get update
+          # تثبيت الواجهة الرسومية وخادم VNC (إصدار خفيف لسرعة التشغيل)
+          sudo apt-get install -y xfce4 xfce4-goodies tightvncserver dbus-x11
+          
+      - name: Setup VNC Server
+        run: |
+          # إنشاء كلمة مرور لـ VNC (كلمة المرور: kali123)
+          mkdir -p ~/.vnc
+          echo "kali123" | vncpasswd -f > ~/.vnc/passwd
+          chmod 600 ~/.vnc/passwd
+          
+          # بدء تشغيل السيرفر
+          vncserver :1 -geometry 1280x720 -depth 24
+          
+      - name: Install and Start NoVNC (Web Interface)
+        run: |
+          sudo apt-get install -y novnc python3-websockify
+          # تشغيل websockify لتحويل VNC إلى Web Port 6080
+          nohup websockify --web /usr/share/novnc/ 6080 localhost:5901 &
+          
+      - name: Install Cloudflared (Tunnel)
+        run: |
+          curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+          sudo dpkg -i cloudflared.deb
+          
+      - name: Start Cloudflare Tunnel
+        run: |
+          echo "---------------------------------------------------"
+          echo "جاري تشغيل الرابط... انتظر ظهور رابط trycloudflare.com"
+          echo "---------------------------------------------------"
+          # تشغيل التانل وربطه بـ نو في إن سي
+          nohup cloudflared tunnel --url http://localhost:6080 > tunnel.log 2>&1 &
+          sleep 10
+          grep -o 'https://[-a-z0-9.]*trycloudflare.com' tunnel.log | head -n 1
+          echo "---------------------------------------------------"
+          echo "كلمة السر هي: kali123"
+          echo "---------------------------------------------------"
+
+      - name: Keep Alive
+        run: |
+          # الحفاظ على تشغيل السيرفر لمدة 6 ساعات
+          sleep 21600
+          
