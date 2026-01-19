@@ -6,15 +6,20 @@ jobs:
   kali-vnc:
     runs-on: ubuntu-latest
     steps:
+      - name: Maximize Disk Space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          sudo apt-get clean
+
       - name: Start Kali Kasm Desktop
         run: |
-          # تشغيل نسخة كالي المجهزة للمتصفح (سريعة جداً ومستقرة)
-          # الباسورد الافتراضي لهذه النسخة هو: password
-          docker run -d --name kali-mobile -p 6080:6901 -e VNC_PW=password kasmweb/kali-rolling-desktop:1.14.0
+          # تشغيل النسخة الاحترافية (Password: password)
+          # سحب الصورة قد يأخذ دقيقة، لا تقلق
+          docker run -d --name kali-mobile --privileged -p 6080:6901 -e VNC_PW=password kasmweb/kali-rolling-desktop:1.14.0
           
       - name: Background Tools Install
         run: |
-          # تثبيت أدواتك في الخلفية لعدم إضاعة الوقت
+          # تثبيت الأدوات في الخلفية (مش هيعطلك عن الدخول)
           docker exec -u 0 -d kali-mobile bash -c "apt-get update && apt-get install -y impacket-scripts burpsuite binwalk"
 
       - name: Setup Cloudflare Tunnel
@@ -23,19 +28,22 @@ jobs:
           sudo dpkg -i cloudflared.deb
           
           echo "---------------------------------------------------"
+          echo "جاري إنشاء رابط التوصيل... انتظر قليلاً"
+          # تشغيل التانل
           nohup cloudflared tunnel --url http://localhost:6080 > tunnel.log 2>&1 &
           
-          # الانتظار حتى يتأكد أن النظام فتح بورت الويب
-          timeout 60s bash -c 'until curl -s localhost:6080; do sleep 2; done'
+          # انتظار 30 ثانية لضمان استقرار cloudflare
+          sleep 30
           
           TUNNEL_URL=$(grep -o 'https://[-a-z0-9.]*trycloudflare.com' tunnel.log | head -n 1)
-          echo "✅ النظام جاهز بأقصى سرعة!"
+          echo "✅ النظام جاهز الآن!"
           echo "رابط الدخول المباشر:"
           echo "$TUNNEL_URL"
           echo "---------------------------------------------------"
-          echo "User: kasm_user"
+          echo "Username: kasm_user"
           echo "Password: password"
           echo "---------------------------------------------------"
+          echo "⚠️ ملاحظة: لو فتحت الرابط ولقيته بيحمل، انتظر دقيقة لأن النظام بيقوم بالداخل"
 
       - name: Maintain Session
         run: sleep 21600
