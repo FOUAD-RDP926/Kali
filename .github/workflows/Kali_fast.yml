@@ -1,4 +1,4 @@
-name: Kali Linux Ultra Fast
+name: Kali Linux Mobile Pro
 on: 
   workflow_dispatch:
 
@@ -6,16 +6,16 @@ jobs:
   kali-vnc:
     runs-on: ubuntu-latest
     steps:
-      - name: Start Pre-configured Kali
+      - name: Start Kali Kasm Desktop
         run: |
-          # استخدام صورة جاهزة تحتوي على VNC و NoVNC مسبقاً لتوفير الوقت
-          docker run -d --name kali-fast -p 6080:6080 --privileged kali-linux-full-gui-vnc-example || \
-          docker run -d --name kali-fast -p 6080:6080 --privileged akasaka/kali-linux-vnc
+          # تشغيل نسخة كالي المجهزة للمتصفح (سريعة جداً ومستقرة)
+          # الباسورد الافتراضي لهذه النسخة هو: password
+          docker run -d --name kali-mobile -p 6080:6901 -e VNC_PW=password kasmweb/kali-rolling-desktop:1.14.0
           
       - name: Background Tools Install
         run: |
-          # تثبيت الأدوات الإضافية في الخلفية حتى لا تضطر للانتظار لفتح الشاشة
-          docker exec -d kali-fast bash -c "apt-get update && apt-get install -y impacket-scripts burpsuite binwalk"
+          # تثبيت أدواتك في الخلفية لعدم إضاعة الوقت
+          docker exec -u 0 -d kali-mobile bash -c "apt-get update && apt-get install -y impacket-scripts burpsuite binwalk"
 
       - name: Setup Cloudflare Tunnel
         run: |
@@ -25,14 +25,17 @@ jobs:
           echo "---------------------------------------------------"
           nohup cloudflared tunnel --url http://localhost:6080 > tunnel.log 2>&1 &
           
-          # فحص استجابة البورت قبل عرض الرابط
+          # الانتظار حتى يتأكد أن النظام فتح بورت الويب
           timeout 60s bash -c 'until curl -s localhost:6080; do sleep 2; done'
           
           TUNNEL_URL=$(grep -o 'https://[-a-z0-9.]*trycloudflare.com' tunnel.log | head -n 1)
-          echo "✅ جاهز! الرابط سيفتح الآن بسرعة:"
-          echo "$TUNNEL_URL/vnc.html?autoconnect=true&resize=remote"
+          echo "✅ النظام جاهز بأقصى سرعة!"
+          echo "رابط الدخول المباشر:"
+          echo "$TUNNEL_URL"
+          echo "---------------------------------------------------"
+          echo "User: kasm_user"
+          echo "Password: password"
           echo "---------------------------------------------------"
 
       - name: Maintain Session
         run: sleep 21600
-        
